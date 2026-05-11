@@ -1,0 +1,1 @@
+{"version":3,"file":"OrderBulkActions.d.ts","sourceRoot":"","sources":["OrderBulkActions.tsx"],"names":[],"mappings":"AAAA,OAAO,KAAmB,MAAM,OAAO,CAAA;AAiBvC,UAAU,qBAAqB;IAC7B,cAAc,EAAE,MAAM,EAAE,CAAA;IACxB,gBAAgB,EAAE,MAAM,IAAI,CAAA;IAC5B,SAAS,EAAE,MAAM,IAAI,CAAA;CACtB;AAED,QAAA,MAAM,gBAAgB,EAAE,KAAK,CAAC,EAAE,CAAC,qBAAqB,CAwOrD,CAAA;AAED,eAAe,gBAAgB,CAAA"}

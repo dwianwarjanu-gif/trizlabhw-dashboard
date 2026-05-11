@@ -1,0 +1,1 @@
+{"version":3,"file":"OrderStatusBadge.d.ts","sourceRoot":"","sources":["OrderStatusBadge.tsx"],"names":[],"mappings":"AAAA,OAAO,KAAK,MAAM,OAAO,CAAA;AAGzB,UAAU,qBAAqB;IAC7B,MAAM,EAAE,MAAM,CAAA;IACd,IAAI,CAAC,EAAE,IAAI,GAAG,IAAI,GAAG,IAAI,CAAA;CAC1B;AAwCD,QAAA,MAAM,gBAAgB,EAAE,KAAK,CAAC,EAAE,CAAC,qBAAqB,CA0BrD,CAAA;AAED,eAAe,gBAAgB,CAAA"}
