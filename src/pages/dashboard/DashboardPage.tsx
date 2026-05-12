@@ -1,185 +1,203 @@
-import React from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { useAuth } from '@/contexts/AuthContext'
+import { useQuery } from "@tanstack/react-query";
 import {
-  ShoppingBagIcon,
-  ClipboardDocumentListIcon,
-  CubeIcon,
-  ExclamationTriangleIcon
-} from '@heroicons/react/24/outline'
+  BarChart3,
+  Bell,
+  Package,
+  ShoppingCart,
+  Store,
+  AlertTriangle,
+  TrendingUp,
+} from "lucide-react";
 
-import { analyticsApi } from '@/services/api'
-import LoadingSpinner from '@/components/ui/LoadingSpinner'
-import StatsCard from '@/components/dashboard/StatsCard'
-import RecentOrders from '@/components/dashboard/RecentOrders'
-import LowStockAlert from '@/components/dashboard/LowStockAlert'
-import SalesChart from '@/components/dashboard/SalesChart'
-import MarketplacePerformance from '@/components/dashboard/MarketplacePerformance'
+import {
+  productsApi,
+  ordersApi,
+  marketplacesApi,
+  inventoryApi,
+} from "@/services/api";
 
+export default function DashboardPage() {
+  const { data, isLoading } = useQuery({
+    queryKey: ["dashboard"],
+    queryFn: async () => {
+      const [products, orders, marketplaces, lowStock] =
+        await Promise.all([
+          productsApi.getAll(),
+          ordersApi.getAll(),
+          marketplacesApi.getUserAccounts(),
+          inventoryApi.getLowStock(),
+        ]);
 
-const Dashboard = () => {
-  const { user } = useAuth()
+      return {
+        products: products.data || [],
+        orders: orders.data || [],
+        marketplaces: marketplaces.data || [],
+        lowStock: lowStock.data || [],
+      };
+    },
+  });
 
-  if (!user) {
-    return <div>Loading...</div>
-  }
-
-  return (
-    <div>
-      <h1>Dashboard</h1>
-      <p>Welcome {user.fullName}</p>
-    </div>
-  )
-}
-
-
-const DashboardPage: React.FC = () => {
-  const { data: analytics, isLoading, error } = useQuery({
-    queryKey: ['dashboard-analytics'],
-    queryFn: () => analyticsApi.getDashboard({ period: 'month' }),
-    refetchInterval: 5 * 60 * 1000, // Refetch every 5 minutes
-  })
+  const stats = [
+    {
+      label: "Total Produk",
+      value: data?.products?.length || 0,
+      note: "Produk terdaftar",
+      icon: Package,
+    },
+    {
+      label: "Total Pesanan",
+      value: data?.orders?.length || 0,
+      note: "Pesanan masuk",
+      icon: ShoppingCart,
+    },
+    {
+      label: "Marketplace Terhubung",
+      value: data?.marketplaces?.length || 0,
+      note: "Marketplace aktif",
+      icon: Store,
+    },
+    {
+      label: "Stok Rendah",
+      value: data?.lowStock?.length || 0,
+      note: "Produk perlu restock",
+      icon: AlertTriangle,
+    },
+  ];
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <LoadingSpinner size="lg" text="Memuat data dashboard..." />
+      <div className="p-10 text-center text-zinc-500">
+        Memuat dashboard...
       </div>
-    )
+    );
   }
-
-  if (error) {
-    return (
-      <div className="text-center py-12">
-        <ExclamationTriangleIcon className="mx-auto h-12 w-12 text-red-400" />
-        <h3 className="mt-2 text-sm font-medium text-gray-900">Error memuat data</h3>
-        <p className="mt-1 text-sm text-gray-500">
-          Terjadi kesalahan saat memuat data dashboard.
-        </p>
-      </div>
-    )
-  }
-
-  const dashboardData = analytics?.data?.analytics
 
   return (
     <div className="space-y-6">
-      {/* Page header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-        <p className="mt-1 text-sm text-gray-600">
-          Ringkasan aktivitas toko Anda bulan ini
-        </p>
-      </div>
-
-      {/* Stats cards */}
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-        <StatsCard
-          title="Total Pesanan"
-          value={dashboardData?.summary?.totalOrders?.current || 0}
-          previousValue={dashboardData?.summary?.totalOrders?.previous || 0}
-          growth={dashboardData?.summary?.totalOrders?.growth || 0}
-          icon={ClipboardDocumentListIcon}
-          color="blue"
-        />
-        
-        <StatsCard
-          title="Total Pendapatan"
-          value={dashboardData?.summary?.totalRevenue?.current || 0}
-          previousValue={dashboardData?.summary?.totalRevenue?.previous || 0}
-          growth={dashboardData?.summary?.totalRevenue?.growth || 0}
-          icon={ShoppingBagIcon}
-          color="green"
-          format="currency"
-        />
-        
-        <StatsCard
-          title="Total Produk"
-          value={dashboardData?.summary?.totalProducts || 0}
-          icon={CubeIcon}
-          color="purple"
-        />
-        
-        <StatsCard
-          title="Stok Rendah"
-          value={dashboardData?.summary?.lowStockCount || 0}
-          icon={ExclamationTriangleIcon}
-          color="red"
-          alert={dashboardData?.summary?.lowStockCount > 0}
-        />
-      </div>
-
-      {/* Charts and data */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Sales chart */}
-        <div className="bg-white rounded-lg shadow-soft p-6">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">
-            Penjualan 30 Hari Terakhir
-          </h3>
-          <SalesChart />
+      <div className="rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm">
+        <div className="flex items-center gap-2 text-zinc-500">
+          <Bell className="h-5 w-5" />
+          <span className="text-sm font-medium">
+            Dashboard Overview
+          </span>
         </div>
 
-        {/* Marketplace performance */}
-        <div className="bg-white rounded-lg shadow-soft p-6">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">
-            Performa Marketplace
-          </h3>
-          <MarketplacePerformance data={dashboardData?.revenueByMarketplace || []} />
+        <div className="mt-4">
+          <h1 className="text-3xl font-bold tracking-tight text-zinc-900">
+            Dashboard
+          </h1>
+
+          <p className="mt-2 max-w-2xl text-zinc-600">
+            Ringkasan performa toko, status pesanan,
+            dan kondisi operasional terbaru.
+          </p>
         </div>
       </div>
 
-      {/* Recent orders and alerts */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Recent orders */}
-        <div className="lg:col-span-2">
-          <RecentOrders />
-        </div>
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {stats.map((item) => {
+          const Icon = item.icon;
 
-        {/* Low stock alert */}
-        <div>
-          <LowStockAlert />
-        </div>
-      </div>
-
-      {/* Top products */}
-      {dashboardData?.topProducts && dashboardData.topProducts.length > 0 && (
-        <div className="bg-white rounded-lg shadow-soft p-6">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">
-            Produk Terlaris
-          </h3>
-          <div className="space-y-4">
-            {dashboardData.topProducts.slice(0, 5).map((item, index) => (
-              <div key={item.productId} className="flex items-center justify-between">
-                <div className="flex items-center space-x-3">
-                  <div className="flex-shrink-0">
-                    <span className="inline-flex items-center justify-center h-8 w-8 rounded-full bg-primary-100 text-primary-800 text-sm font-medium">
-                      {index + 1}
-                    </span>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">
-                      {item.product?.name}
-                    </p>
-                    <p className="text-sm text-gray-500">
-                      SKU: {item.product?.sku}
-                    </p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className="text-sm font-medium text-gray-900">
-                    {item._sum?.quantity || 0} terjual
+          return (
+            <div
+              key={item.label}
+              className="rounded-3xl border border-zinc-200 bg-white p-5 shadow-sm"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-sm text-zinc-500">
+                    {item.label}
                   </p>
-                  <p className="text-sm text-gray-500">
-                    Rp {(item._sum?.totalPrice || 0).toLocaleString('id-ID')}
+
+                  <p className="mt-2 text-3xl font-semibold text-zinc-900">
+                    {item.value}
+                  </p>
+                </div>
+
+                <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-3 text-zinc-700">
+                  <Icon className="h-5 w-5" />
+                </div>
+              </div>
+
+              <p className="mt-4 text-sm text-zinc-500">
+                {item.note}
+              </p>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-3">
+        <div className="rounded-3xl border border-zinc-200 bg-white p-5 shadow-sm xl:col-span-2">
+          <div className="mb-4 flex items-center gap-2">
+            <TrendingUp className="h-5 w-5 text-zinc-600" />
+
+            <h2 className="text-lg font-semibold text-zinc-900">
+              Aktivitas Terbaru
+            </h2>
+          </div>
+
+          <div className="space-y-3">
+            {data?.orders?.slice(0, 5).map((order: any) => (
+              <div
+                key={order.id}
+                className="flex items-center justify-between rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3"
+              >
+                <div>
+                  <p className="font-medium text-zinc-900">
+                    {order.orderNumber || order.id}
+                  </p>
+
+                  <p className="text-sm text-zinc-500">
+                    {order.customerName || "Customer"}
+                  </p>
+                </div>
+
+                <div className="text-right">
+                  <p className="font-medium text-zinc-900">
+                    Rp{" "}
+                    {Number(order.total || 0).toLocaleString(
+                      "id-ID"
+                    )}
+                  </p>
+
+                  <p className="text-sm text-zinc-500">
+                    {order.status}
                   </p>
                 </div>
               </div>
             ))}
           </div>
         </div>
-      )}
-    </div>
-  )
-}
 
-export default DashboardPage
+        <div className="rounded-3xl border border-zinc-200 bg-white p-5 shadow-sm">
+          <div className="mb-4 flex items-center gap-2">
+            <BarChart3 className="h-5 w-5 text-zinc-600" />
+
+            <h2 className="text-lg font-semibold text-zinc-900">
+              Status Cepat
+            </h2>
+          </div>
+
+          <div className="space-y-3">
+            <div className="rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-700">
+              API backend aktif dan terhubung.
+            </div>
+
+            <div className="rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-700">
+              Marketplace aktif:
+              {" "}
+              {data?.marketplaces?.length || 0}
+            </div>
+
+            <div className="rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-700">
+              Produk aktif:
+              {" "}
+              {data?.products?.length || 0}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
