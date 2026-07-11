@@ -9,6 +9,7 @@ import {
   Package,
   RefreshCcw,
   ShoppingBag,
+  X,
 } from "lucide-react";
 import {
   Bar,
@@ -26,6 +27,7 @@ import {
 } from "recharts";
 
 import api from "@/services/api";
+import { OrderRow, type OrderRowData } from "@/components/orders/OrderRow";
 
 type Product = {
   id: string;
@@ -51,15 +53,22 @@ type InventoryItem = {
   updatedAt?: string | null;
 };
 
-type Order = {
-  id: string;
-  orderNumber?: string;
+type OrderItem = {
+  id?: number | string;
+  orderId?: string;
+  productId?: string;
+  sku?: string;
+  productName?: string;
+  quantity?: number;
+  price?: number;
+  lineTotal?: number;
+  createdAt?: string;
+};
+
+type Order = OrderRowData & {
   marketplaceOrderId?: string;
-  status?: string;
-  totalAmount?: number;
-  shippingCost?: number;
-  orderDate?: string | null;
-  createdAt?: string | null;
+  items?: OrderItem[];
+  itemsCount?: number;
 };
 
 const PIE_COLORS = ["#22c55e", "#f59e0b", "#ef4444", "#3b82f6", "#8b5cf6"];
@@ -95,6 +104,8 @@ function normalizeOrder(row: any): Order {
     shippingCost: Number(row.shippingCost ?? row.shipping_cost ?? 0),
     orderDate: row.orderDate ?? row.order_date ?? null,
     createdAt: row.createdAt ?? row.created_at ?? null,
+    items: Array.isArray(row.items) ? row.items : [],
+    itemsCount: Number(row.itemsCount ?? row.items_count ?? 0),
   };
 }
 
@@ -177,9 +188,13 @@ function useElementSize<T extends HTMLElement>() {
   return [ref, size] as const;
 }
 
-export default function AnalyticsPage() {
-  const { data, isLoading, isError, isFetching, refetch } = useQuery({
-    queryKey: ["analytics-page"],
+export default function DashboardPage() {
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
+  const [isLoadingDetail, setIsLoadingDetail] = useState(false);
+
+  const { data, isLoading, isError, refetch, isFetching } = useQuery({
+    queryKey: ["dashboard-summary"],
     queryFn: async () => {
       const [productsRes, ordersRes, inventoryRes] = await Promise.all([
         api.get("/products"),
@@ -188,24 +203,38 @@ export default function AnalyticsPage() {
       ]);
 
       const products = extractProducts(productsRes.data);
-      const orders = extractOrders(ordersRes.data).map(normalizeOrder);
       const inventory = extractInventory(inventoryRes.data);
+      const orders = extractOrders(ordersRes.data).map(normalizeOrder);
 
-      return { products, orders, inventory };
+      return {
+        products,
+        inventory,
+        orders,
+      };
     },
   });
 
   const products = data?.products ?? [];
-  const orders = data?.orders ?? [];
   const inventory = data?.inventory ?? [];
+  const orders = data?.orders ?? [];
+
+  const recentOrders = useMemo(() => {
+    return [...orders]
+      .sort((a, b) => {
+        const aTime = new Date(a.orderDate || a.createdAt || "").getTime() || 0;
+        const bTime = new Date(b.orderDate || b.createdAt || "").getTime() || 0;
+        return bTime - aTime;
+      })
+      .slice(0, 4);
+  }, [orders]);
+
   const totalProducts = products.length;
-
+  const totalOrders = orders.length;
   const totalSales = orders.reduce((sum, order) => {
-    return sum + Number(order.totalAmount || 0) + Number(order.shippingCost || 0);
+    const base = Number(order.totalAmount || 0);
+    const shipping = Number(order.shippingCost || 0);
+    return sum + base + shipping;
   }, 0);
-
-  const orderCount = orders.length;
-  const averageOrderValue = orderCount > 0 ? totalSales / orderCount : 0;
 
   const lowStockCount = inventory.filter((item) => {
     const stock = Number(item.stock || 0);
@@ -216,6 +245,11 @@ export default function AnalyticsPage() {
   const emptyStockCount = inventory.filter(
     (item) => Number(item.stock || 0) <= 0
   ).length;
+
+  const pendingOrders = orders.filter((order) => {
+    const s = String(order.status || "").toLowerCase();
+    return s.includes("pending") || s.includes("menunggu");
+  }).length;
 
   const statusBreakdown = useMemo(() => {
     const map = new Map<string, number>();
@@ -282,21 +316,36 @@ export default function AnalyticsPage() {
     }));
   }, [orders]);
 
-  const recentOrders = [...orders]
-    .sort((a, b) => {
-      const aTime = new Date(a.orderDate || a.createdAt || "").getTime() || 0;
-      const bTime = new Date(b.orderDate || b.createdAt || "").getTime() || 0;
-      return bTime - aTime;
-    })
-    .slice(0, 5);
+  const [salesChartRef, salesChartSize] = useElementSize<HTMLDivElement>();
+  const [statusChartRef, statusChartSize] = useElementSize<HTMLDivElement>();
+  const [inventoryChartRef, inventoryChartSize] = useElementSize<HTMLDivElement>();
 
   const topProducts = [...inventory]
     .sort((a, b) => Number(a.stock || 0) - Number(b.stock || 0))
     .slice(0, 5);
 
-  const [salesChartRef, salesChartSize] = useElementSize<HTMLDivElement>();
-  const [statusChartRef, statusChartSize] = useElementSize<HTMLDivElement>();
-  const [inventoryChartRef, inventoryChartSize] = useElementSize<HTMLDivElement>();
+  const openDetail = async (order: Order) => {
+    try {
+      setIsLoadingDetail(true);
+
+      const res = await api.get(`/orders/${order.id}`);
+      const payload = res.data?.order || res.data?.data || order;
+
+      setSelectedOrder(payload);
+      setIsDetailOpen(true);
+    } catch (err) {
+      console.error(err);
+      setSelectedOrder(order);
+      setIsDetailOpen(true);
+    } finally {
+      setIsLoadingDetail(false);
+    }
+  };
+
+  const closeDetail = () => {
+    setIsDetailOpen(false);
+    setSelectedOrder(null);
+  };
 
   return (
     <div className="space-y-6">
@@ -305,13 +354,13 @@ export default function AnalyticsPage() {
           <div>
             <div className="inline-flex items-center gap-2 text-sm text-zinc-500">
               <BarChart3 className="h-4 w-4" />
-              Analytics Dashboard
+              Dashboard Overview
             </div>
             <h1 className="mt-2 text-3xl font-bold tracking-tight text-zinc-900">
-              Analytics
+              Dashboard
             </h1>
             <p className="mt-2 text-zinc-600">
-              Ringkasan performa toko, penjualan, status order, dan kondisi inventori.
+              Ringkasan performa toko, status pesanan, dan kondisi operasional terbaru.
             </p>
           </div>
 
@@ -333,14 +382,14 @@ export default function AnalyticsPage() {
         <div className="rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm">
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-sm text-zinc-500">Total Penjualan</p>
+              <p className="text-sm text-zinc-500">Total Produk</p>
               <p className="mt-2 text-3xl font-semibold text-zinc-900">
-                {isLoading ? "..." : formatCurrency(totalSales)}
+                {isLoading ? "..." : totalProducts}
               </p>
-              <p className="mt-3 text-sm text-zinc-500">Semua order + ongkir</p>
+              <p className="mt-3 text-sm text-zinc-500">Produk terdaftar</p>
             </div>
             <div className="rounded-2xl border border-zinc-200 p-3 text-zinc-500">
-              <ShoppingBag className="h-5 w-5" />
+              <Package className="h-5 w-5" />
             </div>
           </div>
         </div>
@@ -348,14 +397,14 @@ export default function AnalyticsPage() {
         <div className="rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm">
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-sm text-zinc-500">Total Order</p>
+              <p className="text-sm text-zinc-500">Total Pesanan</p>
               <p className="mt-2 text-3xl font-semibold text-zinc-900">
-                {isLoading ? "..." : orderCount}
+                {isLoading ? "..." : totalOrders}
               </p>
-              <p className="mt-3 text-sm text-zinc-500">Order masuk</p>
+              <p className="mt-3 text-sm text-zinc-500">Pesanan masuk</p>
             </div>
             <div className="rounded-2xl border border-zinc-200 p-3 text-zinc-500">
-              <Clock3 className="h-5 w-5" />
+              <ShoppingBag className="h-5 w-5" />
             </div>
           </div>
         </div>
@@ -378,11 +427,11 @@ export default function AnalyticsPage() {
         <div className="rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm">
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-sm text-zinc-500">Average Order Value</p>
+              <p className="text-sm text-zinc-500">Sistem</p>
               <p className="mt-2 text-3xl font-semibold text-zinc-900">
-                {isLoading ? "..." : formatCurrency(averageOrderValue)}
+                {isError ? "OFFLINE" : "ONLINE"}
               </p>
-              <p className="mt-3 text-sm text-zinc-500">Rata-rata order</p>
+              <p className="mt-3 text-sm text-zinc-500">Backend aktif</p>
             </div>
             <div className="rounded-2xl border border-zinc-200 p-3 text-zinc-500">
               <CheckCircle2 className="h-5 w-5" />
@@ -393,10 +442,10 @@ export default function AnalyticsPage() {
 
       <div className="grid gap-6 xl:grid-cols-3">
         <div className="rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm xl:col-span-2">
-          <div className="mb-5 flex items-center gap-2">
+          <div className="mb-4 flex items-center gap-2">
             <BarChart3 className="h-5 w-5 text-zinc-600" />
             <h2 className="text-lg font-semibold text-zinc-900">
-              Grafik Analytics
+              Analytics
             </h2>
           </div>
 
@@ -579,39 +628,12 @@ export default function AnalyticsPage() {
         <div className="space-y-3">
           {recentOrders.length > 0 ? (
             recentOrders.map((order) => (
-              <div
+              <OrderRow
                 key={order.id}
-                className="rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="truncate font-medium text-zinc-900">
-                      {order.orderNumber || "-"}
-                    </p>
-                    <p className="truncate text-sm text-zinc-500">
-                      {order.marketplaceOrderId || "-"}
-                    </p>
-                    <p className="text-sm text-zinc-400">
-                      {formatDate(order.orderDate || order.createdAt)}
-                    </p>
-                  </div>
-
-                  <div className="text-right">
-                    <p className="font-medium text-zinc-900">
-                      {formatCurrency(
-                        Number(order.totalAmount || 0) +
-                          Number(order.shippingCost || 0)
-                      )}
-                    </p>
-                    <p className="text-sm text-zinc-500">
-                      + {formatCurrency(order.shippingCost)} ongkir
-                    </p>
-                    <p className="text-xs text-zinc-500">
-                      {getStatusLabel(order.status)}
-                    </p>
-                  </div>
-                </div>
-              </div>
+                order={order}
+                compact
+                onDetail={openDetail}
+              />
             ))
           ) : (
             <div className="rounded-2xl border border-dashed border-zinc-300 bg-zinc-50 p-6 text-center text-sm text-zinc-500">
@@ -621,9 +643,135 @@ export default function AnalyticsPage() {
         </div>
       </div>
 
-      {isError && (
-        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          Gagal memuat analytics.
+      {isDetailOpen && selectedOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-2xl font-bold text-zinc-900">
+                  Detail Order
+                </h2>
+                <p className="mt-1 text-sm text-zinc-500">
+                  {selectedOrder.orderNumber}
+                </p>
+              </div>
+
+              <button
+                onClick={closeDetail}
+                className="rounded-full p-2 text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {isLoadingDetail ? (
+              <div className="py-16 text-center text-zinc-500">
+                Memuat detail...
+              </div>
+            ) : (
+              <>
+                <div className="mt-6 grid gap-4 md:grid-cols-2">
+                  <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
+                    <p className="text-sm text-zinc-500">Order Number</p>
+                    <p className="mt-1 font-medium text-zinc-900">
+                      {selectedOrder.orderNumber || "-"}
+                    </p>
+                  </div>
+
+                  <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
+                    <p className="text-sm text-zinc-500">Status</p>
+                    <p className="mt-1 font-medium text-zinc-900">
+                      {selectedOrder.status || "-"}
+                    </p>
+                  </div>
+
+                  <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
+                    <p className="text-sm text-zinc-500">Total Amount</p>
+                    <p className="mt-1 font-medium text-zinc-900">
+                      {formatCurrency(selectedOrder.totalAmount)}
+                    </p>
+                  </div>
+
+                  <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
+                    <p className="text-sm text-zinc-500">Shipping Cost</p>
+                    <p className="mt-1 font-medium text-zinc-900">
+                      {formatCurrency(selectedOrder.shippingCost)}
+                    </p>
+                  </div>
+
+                  <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4 md:col-span-2">
+                    <p className="text-sm text-zinc-500">Tanggal Order</p>
+                    <p className="mt-1 font-medium text-zinc-900">
+                      {formatDate(selectedOrder.orderDate || selectedOrder.createdAt)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-6 rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-medium text-zinc-700">
+                      Item Order
+                    </p>
+
+                    <span className="rounded-full bg-zinc-900 px-3 py-1 text-xs font-medium text-white">
+                      {selectedOrder.items?.length || 0} item
+                    </span>
+                  </div>
+
+                  <div className="mt-4 space-y-3">
+                    {selectedOrder.items?.length ? (
+                      selectedOrder.items.map((item, index) => (
+                        <div
+                          key={`${item.id || item.productId}-${index}`}
+                          className="rounded-2xl border border-zinc-200 bg-white p-4"
+                        >
+                          <div className="flex items-start justify-between gap-4">
+                            <div>
+                              <div className="font-medium text-zinc-900">
+                                {item.productName || "-"}
+                              </div>
+                              <div className="mt-1 text-sm text-zinc-500">
+                                SKU: {item.sku || "-"}
+                              </div>
+                            </div>
+
+                            <div className="text-right">
+                              <div className="text-sm text-zinc-500">Qty</div>
+                              <div className="font-medium text-zinc-900">
+                                {item.quantity || 0}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="mt-4 flex items-center justify-between border-t border-zinc-100 pt-3 text-sm">
+                            <span className="text-zinc-500">Harga</span>
+                            <span className="font-medium text-zinc-900">
+                              {formatCurrency(item.price)}
+                            </span>
+                          </div>
+
+                          <div className="mt-2 flex items-center justify-between text-sm">
+                            <span className="text-zinc-500">Subtotal</span>
+                            <span className="font-semibold text-zinc-900">
+                              {formatCurrency(
+                                item.lineTotal ||
+                                  Number(item.price || 0) *
+                                    Number(item.quantity || 0)
+                              )}
+                            </span>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="rounded-2xl border border-dashed border-zinc-300 bg-white p-6 text-center text-sm text-zinc-500">
+                        Tidak ada item order.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       )}
     </div>

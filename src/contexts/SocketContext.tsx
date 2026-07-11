@@ -1,138 +1,216 @@
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react'
-import { io, Socket } from 'socket.io-client'
-import toast from 'react-hot-toast'
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
-import { useAuth } from './AuthContext'
+import { io, Socket } from "socket.io-client";
+import { useAuth } from "@/contexts/AuthContext";
 
-interface SocketContextType {
-  socket: Socket | null
-  isConnected: boolean
-  emit: (event: string, data?: any) => void
-  on: (event: string, callback: (data: any) => void) => void
-  off: (event: string, callback?: (data: any) => void) => void
+const SOCKET_URL =
+  import.meta.env.VITE_SOCKET_URL ||
+  import.meta.env.VITE_API_URL ||
+  "https://api.trizlabhw.com";
+
+type SocketStatus =
+  | "connected"
+  | "connecting"
+  | "reconnecting"
+  | "disconnected";
+
+type SocketContextValue = {
+  socket: Socket | null;
+  status: SocketStatus;
+  isConnected: boolean;
+};
+
+const SocketContext = createContext<SocketContextValue | undefined>(
+  undefined
+);
+
+let socket: Socket | null = null;
+
+function createSocket() {
+  return io(SOCKET_URL, {
+    autoConnect: false,
+    transports: ["websocket", "polling"],
+
+    reconnection: true,
+    reconnectionAttempts: Infinity,
+    reconnectionDelay: 1000,
+    reconnectionDelayMax: 5000,
+
+    timeout: 20000,
+    forceNew: false,
+  });
 }
 
-const SocketContext = createContext<SocketContextType | undefined>(undefined)
+export function SocketProvider({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const { user, isAuthenticated } = useAuth();
 
-interface SocketProviderProps {
-  children: ReactNode
-}
+  const [status, setStatus] =
+    useState<SocketStatus>("disconnected");
 
-export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
-  const [socket, setSocket] = useState<Socket | null>(null)
-  const [isConnected, setIsConnected] = useState(false)
-  const auth = useAuth()
-  const user = auth?.user
-  const token = auth?.token
+  const initializedRef = useRef(false);
+
+  const userId =
+    (user as any)?.id ||
+    (user as any)?.user_id ||
+    (user as any)?.userId ||
+    null;
 
   useEffect(() => {
-    if (user && token) {
-      // Create socket connection
-      const SERVER_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000'
-      const newSocket = io(SERVER_URL, {
-        auth: {token},
-        transports: ['websocket', 'polling']
-      })
+    if (!socket) {
+      socket = createSocket();
+    }
 
-      // Connection event handlers
-      newSocket.on('connect', () => {
-        console.log('Socket connected:', newSocket.id)
-        setIsConnected(true)
-        
-        // Join user-specific room
-        newSocket.emit('join-room', user.id)
-      })
+    if (!socket) return;
 
-      newSocket.on('disconnect', () => {
-        setIsConnected(false)
-      })
+    const handleConnect = () => {
+      console.log("🟢 SOCKET CONNECTED");
 
+      setStatus("connected");
 
-      newSocket.on('connect_error', (error) => {
-        console.error('Socket connection error:', error)
-        setIsConnected(false)
-      })
+      if (userId) {
+        socket?.emit("join-room", String(userId));
 
-      // Application-specific event handlers
-      newSocket.on('sync-completed', (data) => {
-        toast.success(`Sinkronisasi ${data.type} selesai: ${data.successCount} berhasil, ${data.failureCount} gagal`)
-      })
+        console.log(
+          "🟢 JOIN ROOM:",
+          String(userId)
+        );
+      }
+    };
 
-      newSocket.on('sync-failed', (data) => {
-        toast.error(`Sinkronisasi ${data.type} gagal: ${data.message}`)
-      })
+    const handleDisconnect = (reason: string) => {
+      console.log("🔴 SOCKET DISCONNECTED:", reason);
 
-      newSocket.on('low-stock-alert', (data) => {
-        toast.error(`Stok rendah: ${data.productName} (${data.currentStock} tersisa)`)
-      })
+      setStatus("disconnected");
+    };
 
-      newSocket.on('order-received', (data) => {
-        toast.success(`Pesanan baru diterima: ${data.orderNumber} dari ${data.marketplace}`)
-      })
+    const handleReconnectAttempt = (attempt: number) => {
+      console.log(
+        "🟡 SOCKET RECONNECTING:",
+        attempt
+      );
 
-      newSocket.on('inventory-updated', (data) => {
-        toast.info(`Stok ${data.productName} diperbarui: ${data.newStock}`)
-      })
+      setStatus("reconnecting");
+    };
 
-      setSocket(newSocket)
+    const handleReconnect = (attempt: number) => {
+      console.log(
+        "🟢 SOCKET RECONNECTED:",
+        attempt
+      );
 
-      // Cleanup on unmount
-      return () => {
-        newSocket.close()
-        setSocket(null)
-        setIsConnected(false)
+      setStatus("connected");
+
+      if (userId) {
+        socket?.emit("join-room", String(userId));
+
+        console.log(
+          "🟢 REJOIN ROOM:",
+          String(userId)
+        );
+      }
+    };
+
+    const handleConnectError = (err: any) => {
+      console.error(
+        "🔴 SOCKET CONNECT ERROR:",
+        err?.message
+      );
+
+      setStatus("reconnecting");
+    };
+
+    socket.on("connect", handleConnect);
+
+    socket.on("disconnect", handleDisconnect);
+
+    socket.on("connect_error", handleConnectError);
+
+    socket.io.on(
+      "reconnect_attempt",
+      handleReconnectAttempt
+    );
+
+    socket.io.on("reconnect", handleReconnect);
+
+    if (isAuthenticated && userId) {
+      if (!socket.connected) {
+        console.log("🟡 CONNECTING SOCKET...");
+
+        setStatus("connecting");
+
+        socket.connect();
+      } else {
+        socket.emit("join-room", String(userId));
+
+        setStatus("connected");
       }
     } else {
-      // Disconnect socket if user is not authenticated
-      if (socket) {
-        socket.close()
-        setSocket(null)
-        setIsConnected(false)
-      }
-    }
-  }, [user, token])
+      console.log("🔴 SOCKET LOGOUT");
 
-  const emit = (event: string, data?: any) => {
-    if (socket && isConnected) {
-      socket.emit(event, data)
-    }
-  }
+      socket.disconnect();
 
-  const on = (event: string, callback: (data: any) => void) => {
-    if (socket) {
-      socket.on(event, callback)
+      setStatus("disconnected");
     }
-  }
 
-  const off = (event: string, callback?: (data: any) => void) => {
-    if (socket) {
-      if (callback) {
-        socket.off(event, callback)
-      } else {
-        socket.off(event)
-      }
-    }
-  }
+    initializedRef.current = true;
 
-  const value: SocketContextType = {
-    socket,
-    isConnected,
-    emit,
-    on,
-    off
-  }
+    return () => {
+      socket?.off("connect", handleConnect);
+
+      socket?.off("disconnect", handleDisconnect);
+
+      socket?.off(
+        "connect_error",
+        handleConnectError
+      );
+
+      socket?.io.off(
+        "reconnect_attempt",
+        handleReconnectAttempt
+      );
+
+      socket?.io.off(
+        "reconnect",
+        handleReconnect
+      );
+    };
+  }, [isAuthenticated, userId]);
+
+  const value = useMemo(
+    () => ({
+      socket,
+      status,
+      isConnected: status === "connected",
+    }),
+    [status]
+  );
 
   return (
     <SocketContext.Provider value={value}>
       {children}
     </SocketContext.Provider>
-  )
+  );
 }
 
-export const useSocket = (): SocketContextType => {
-  const context = useContext(SocketContext)
-  if (context === undefined) {
-    throw new Error('useSocket must be used within a SocketProvider')
+export function useSocket() {
+  const ctx = useContext(SocketContext);
+
+  if (!ctx) {
+    throw new Error(
+      "useSocket must be used inside SocketProvider"
+    );
   }
-  return context
+
+  return ctx;
 }

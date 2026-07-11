@@ -60,9 +60,9 @@ const ProductPage = () => {
       {/* Page header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Produk</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Product</h1>
           <p className="mt-1 text-sm text-gray-600">
-            Kelola semua produk Anda di sini
+            Kelola semua Product Anda di sini
           </p>
         </div>
         <div className="mt-4 sm:mt-0">
@@ -71,7 +71,7 @@ const ProductPage = () => {
             className="btn btn-primary btn-md"
           >
             <PlusIcon className="h-5 w-5 mr-2" />
-            Tambah Produk
+            Tambah Product
           </Link>
         </div>
       </div>
@@ -85,7 +85,7 @@ const ProductPage = () => {
               <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
               <input
                 type="text"
-                placeholder="Cari produk, SKU, atau nama..."
+                placeholder="Cari Product, SKU, atau nama..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="input pl-10 w-full"
@@ -193,7 +193,7 @@ const ProductPage = () => {
                 className="btn btn-primary btn-md"
               >
                 <PlusIcon className="h-5 w-5 mr-2" />
-                Tambah Produk
+                Tambah Product
               </Link>
             </div>
           </div>

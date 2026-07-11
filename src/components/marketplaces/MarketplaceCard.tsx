@@ -16,6 +16,7 @@ interface MarketplaceAccount {
   storeName: string
   isConnected: boolean
   lastSynced?: string
+  lastSync?: string
   marketplace: {
     name: string
     code: string
@@ -143,8 +144,8 @@ const MarketplaceCard: React.FC<MarketplaceCardProps> = ({
         </div>
         <div className="text-center p-3 bg-gray-50 rounded-lg">
           <div className="text-sm font-medium text-gray-900">
-            {account.lastSynced ? (
-              new Date(account.lastSynced).toLocaleDateString('id-ID', {
+            {lastSyncValue ? (
+              new Date(lastSyncValue).toLocaleDateString('id-ID', {
                 day: 'numeric',
                 month: 'short'
               })
@@ -216,9 +217,9 @@ const MarketplaceCard: React.FC<MarketplaceCardProps> = ({
       )}
 
       {/* Last sync info */}
-      {account.isConnected && account.lastSynced && (
+      {account.isConnected && lastSyncValue && (
         <div className="mt-3 text-xs text-gray-500 text-center">
-          Terakhir disinkronkan: {new Date(account.lastSynced).toLocaleString('id-ID')}
+          Terakhir disinkronkan: {new Date(lastSyncValue).toLocaleString('id-ID')}
         </div>
       )}
     </div>
